@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inicio | Juntadas Fierreras</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body class="bg-cars layout-app">
+
+    <header class="glass-header">
+        <div class="header-content">
+            <img src="img/plantelplano.webp" alt="Logo" class="header-logo">
+            
+            <button class="hamburger-btn" onclick="toggleMenu()">
+                <span></span><span></span><span></span>
+            </button>
+
+            <nav class="nav-links" id="navMenu">
+                <a href="inicio.html" class="active">Inicio</a>
+                <a href="juntadas.html">Próximas Juntadas</a>
+                <a href="integrantes.html">Pilotos</a>
+                <button onclick="logout()" class="btn-logout">Cerrar Sesión</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-container fade-in">
+        <section class="hero-section glass-card">
+
+            <div class="hero-text">
+                <h2>Bienvenido al Plantel, <span id="userNameDisplay" class="highlight">Piloto</span></h2>
+                <p>La plataforma exclusiva y PRIVADA para organizar nuestras juntadas, confirmar asistencia y ver quien se la re come.</p>
+
+            </div>
+                        <div class="hero-logo">
+                <img src="img/plantellogo.webp" alt="Logo" class="inicio-logo">
+            </div>
+          
+        </section>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script>
+        // Lógica específica para las páginas de la app
+        
+        // 1. Proteger la ruta (si no hay sesión, vuelve al login)
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user) window.location.href = 'index.html';
+        
+        // 2. Mostrar el nombre del usuario
+        document.getElementById('userNameDisplay').textContent = user.username;
+
+        // 3. Menú Hamburguesa
+        function toggleMenu() {
+        const menu = document.getElementById('navMenu');
+        menu.classList.toggle('show');
+        }
+
+        // 4. Cerrar sesión
+        function logout() {
+            localStorage.removeItem('user');
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+<footer class="main-footer">
+    <p>&copy; 2026 Juanchi Vicino. Todos los derechos reservados.</p>
+</footer>
+</html>
