@@ -1,5 +1,5 @@
-const API_URL = 'http://localhost:3000/api';
-const BACKEND_URL = 'http://localhost:3000'; // Para cargar las imágenes correctamente
+const BACKEND_URL = 'https://juntadas-fierreras.onrender.com'; 
+const API_URL = `${BACKEND_URL}/api`;
 
 const api = {
     // ==========================================
