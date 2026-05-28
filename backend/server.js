@@ -3,15 +3,25 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs'); // <--- Añadido para manejar carpetas
 const db = require('./database');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // <--- Ajustado para que funcione en Render
 
 // Middlewares
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ==========================================
+// PREVENCIÓN DE ERRORES: CREAR CARPETA UPLOADS
+// ==========================================
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir);
+    console.log('🔧 Carpeta "uploads" creada automáticamente.');
+}
 
 // Configuración de Multer para fotos de perfil y juntadas
 const storage = multer.diskStorage({
@@ -72,28 +82,22 @@ app.get('/api/meets', (req, res) => {
     });
 });
 
-/**
- * MODIFICACIÓN AQUÍ: 
- * Ahora registra asistencia o ACTUALIZA si el usuario ya había votado en esa juntada.
- */
+// Registrar asistencia (Crea o Actualiza)
 app.post('/api/attendance', (req, res) => {
     const { meet_id, user_id, status, reason } = req.body;
     
-    // Verificamos si ya existe una respuesta de este usuario para esta juntada
     const checkQuery = `SELECT id FROM attendance WHERE meet_id = ? AND user_id = ?`;
     
     db.get(checkQuery, [meet_id, user_id], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
 
         if (row) {
-            // Si ya existe, ACTUALIZAMOS el registro existente (sobrescribimos)
             const updateQuery = `UPDATE attendance SET status = ?, reason = ? WHERE id = ?`;
             db.run(updateQuery, [status, reason, row.id], function(errUpdate) {
                 if (errUpdate) return res.status(500).json({ error: errUpdate.message });
                 res.json({ message: 'Respuesta actualizada correctamente.' });
             });
         } else {
-            // Si no existe, CREAMOS un nuevo registro
             const insertQuery = `INSERT INTO attendance (meet_id, user_id, status, reason) VALUES (?, ?, ?, ?)`;
             db.run(insertQuery, [meet_id, user_id, status, reason], function(errInsert) {
                 if (errInsert) return res.status(500).json({ error: errInsert.message });
@@ -138,5 +142,5 @@ app.get('/api/meets/:id/attendance', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Motor encendido. Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`Motor encendido. Servidor corriendo en el puerto ${PORT}`);
 });
