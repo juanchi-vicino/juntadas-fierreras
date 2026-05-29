@@ -1,42 +1,57 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
 
-const dbPath = path.resolve(__dirname, 'database.sqlite');
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) console.error('Error al conectar con SQLite:', err.message);
-    else console.log('Conectado a la base de datos SQLite.');
+// Conexión a la base de datos PostgreSQL usando variables de entorno
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false // Requisito para conexiones en Render/Neon
+    }
 });
 
-// Crear tablas si no existen
-db.serialize(() => {
-    // Tabla Usuarios
-    db.run(`CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        profilePic TEXT,
-        role TEXT DEFAULT 'user'
-    )`);
+// Función para inicializar las tablas
+const initDB = async () => {
+    try {
+        // Tabla Usuarios
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                profilePic TEXT,
+                role VARCHAR(50) DEFAULT 'user'
+            );
+        `);
 
-    // Tabla Juntadas
-    db.run(`CREATE TABLE IF NOT EXISTS meets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        place TEXT NOT NULL,
-        date TEXT NOT NULL,
-        description TEXT,
-        image TEXT
-    )`);
+        // Tabla Juntadas
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS meets (
+                id SERIAL PRIMARY KEY,
+                place TEXT NOT NULL,
+                date TEXT NOT NULL,
+                description TEXT,
+                image TEXT
+            );
+        `);
 
-    // Tabla Asistencias
-    db.run(`CREATE TABLE IF NOT EXISTS attendance (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        meet_id INTEGER,
-        user_id INTEGER,
-        status TEXT NOT NULL, -- 'SI' o 'NO'
-        reason TEXT,
-        FOREIGN KEY(meet_id) REFERENCES meets(id),
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    )`);
-});
+        // Tabla Asistencias
+        // Le agregamos ON DELETE CASCADE y UNIQUE para mantener la integridad de los datos
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS attendance (
+                id SERIAL PRIMARY KEY,
+                meet_id INTEGER REFERENCES meets(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                status VARCHAR(10) NOT NULL,
+                reason TEXT,
+                UNIQUE(meet_id, user_id)
+            );
+        `);
+        
+        console.log('🏁 Conectado a PostgreSQL: Motor de base de datos listo.');
+    } catch (err) {
+        console.error('Error al inicializar PostgreSQL:', err.message);
+    }
+};
 
-module.exports = db;
+initDB();
+
+module.exports = pool;

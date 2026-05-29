@@ -3,27 +3,22 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs'); // <--- Añadido para manejar carpetas
-const db = require('./database');
+const fs = require('fs');
+const db = require('./database'); // Ahora importa PostgreSQL
 
 const app = express();
-const PORT = process.env.PORT || 3000; // <--- Ajustado para que funcione en Render
+const PORT = process.env.PORT || 3000;
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ==========================================
-// PREVENCIÓN DE ERRORES: CREAR CARPETA UPLOADS
-// ==========================================
+// Prevenir caída por carpeta vacía
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir);
-    console.log('🔧 Carpeta "uploads" creada automáticamente.');
 }
 
-// Configuración de Multer para fotos de perfil y juntadas
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, 'uploads/'),
     filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
@@ -34,113 +29,102 @@ const upload = multer({ storage });
 // RUTAS DE AUTENTICACIÓN
 // ==========================================
 
-// Registro
 app.post('/api/register', upload.single('profilePic'), async (req, res) => {
     const { username, password } = req.body;
     const profilePic = req.file ? `/uploads/${req.file.filename}` : null;
 
-    if (!profilePic) {
-        return res.status(400).json({ error: 'La foto de perfil es obligatoria.' });
-    }
+    if (!profilePic) return res.status(400).json({ error: 'La foto de perfil es obligatoria.' });
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        const query = `INSERT INTO users (username, password, profilePic) VALUES (?, ?, ?)`;
+        // En PostgreSQL usamos RETURNING id para obtener el ID recién creado
+        const query = `INSERT INTO users (username, password, profilePic) VALUES ($1, $2, $3) RETURNING id`;
+        const result = await db.query(query, [username, hashedPassword, profilePic]);
         
-        db.run(query, [username, hashedPassword, profilePic], function(err) {
-            if (err) return res.status(400).json({ error: 'El usuario ya existe.' });
-            res.status(201).json({ message: 'Usuario registrado con éxito.', id: this.lastID });
-        });
+        res.status(201).json({ message: 'Usuario registrado con éxito.', id: result.rows[0].id });
     } catch (error) {
+        // Código 23505 es el error de "Usuario duplicado" en PostgreSQL
+        if (error.code === '23505') return res.status(400).json({ error: 'El usuario ya existe.' });
         res.status(500).json({ error: 'Error interno del servidor.' });
     }
 });
 
-// Login
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
-    
-    db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
-        if (err || !user) return res.status(401).json({ error: 'Usuario no encontrado.' });
+    try {
+        const result = await db.query(`SELECT * FROM users WHERE username = $1`, [username]);
+        const user = result.rows[0]; // PostgreSQL devuelve los datos dentro del array .rows
+
+        if (!user) return res.status(401).json({ error: 'Usuario no encontrado.' });
 
         const match = await bcrypt.compare(password, user.password);
         if (!match) return res.status(401).json({ error: 'Contraseña incorrecta.' });
 
         res.json({ message: 'Login exitoso', user: { id: user.id, username: user.username, profilePic: user.profilePic } });
-    });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // ==========================================
 // RUTAS DE JUNTADAS Y ASISTENCIA
 // ==========================================
 
-// Obtener todas las juntadas
-app.get('/api/meets', (req, res) => {
-    db.all(`SELECT * FROM meets ORDER BY date DESC`, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+app.get('/api/meets', async (req, res) => {
+    try {
+        const result = await db.query(`SELECT * FROM meets ORDER BY date DESC`);
+        res.json(result.rows);
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Registrar asistencia (Crea o Actualiza)
-app.post('/api/attendance', (req, res) => {
+app.post('/api/attendance', async (req, res) => {
     const { meet_id, user_id, status, reason } = req.body;
-    
-    const checkQuery = `SELECT id FROM attendance WHERE meet_id = ? AND user_id = ?`;
-    
-    db.get(checkQuery, [meet_id, user_id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        if (row) {
-            const updateQuery = `UPDATE attendance SET status = ?, reason = ? WHERE id = ?`;
-            db.run(updateQuery, [status, reason, row.id], function(errUpdate) {
-                if (errUpdate) return res.status(500).json({ error: errUpdate.message });
-                res.json({ message: 'Respuesta actualizada correctamente.' });
-            });
-        } else {
-            const insertQuery = `INSERT INTO attendance (meet_id, user_id, status, reason) VALUES (?, ?, ?, ?)`;
-            db.run(insertQuery, [meet_id, user_id, status, reason], function(errInsert) {
-                if (errInsert) return res.status(500).json({ error: errInsert.message });
-                res.json({ message: 'Asistencia registrada con éxito.' });
-            });
-        }
-    });
+    try {
+        // PostgreSQL tiene el hermoso comando "ON CONFLICT" para actualizar si ya existe
+        const query = `
+            INSERT INTO attendance (meet_id, user_id, status, reason) 
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (meet_id, user_id) 
+            DO UPDATE SET status = EXCLUDED.status, reason = EXCLUDED.reason
+        `;
+        await db.query(query, [meet_id, user_id, status, reason]);
+        res.json({ message: 'Asistencia registrada.' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
-// Obtener integrantes
-app.get('/api/users', (req, res) => {
-    db.all(`SELECT id, username, profilePic FROM users`, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+app.get('/api/users', async (req, res) => {
+    try {
+        const result = await db.query(`SELECT id, username, profilePic FROM users`);
+        res.json(result.rows);
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Crear una nueva juntada
-app.post('/api/meets', upload.single('image'), (req, res) => {
+app.post('/api/meets', upload.single('image'), async (req, res) => {
     const { place, date, description } = req.body;
     const image = req.file ? `/uploads/${req.file.filename}` : null;
 
-    db.run(`INSERT INTO meets (place, date, description, image) VALUES (?, ?, ?, ?)`, 
-    [place, date, description, image], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.status(201).json({ message: 'Juntada creada con éxito.', id: this.lastID });
-    });
+    try {
+        const query = `INSERT INTO meets (place, date, description, image) VALUES ($1, $2, $3, $4) RETURNING id`;
+        const result = await db.query(query, [place, date, description, image]);
+        res.status(201).json({ message: 'Juntada creada con éxito.', id: result.rows[0].id });
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Obtener la lista de asistencias de una juntada específica
-app.get('/api/meets/:id/attendance', (req, res) => {
+app.get('/api/meets/:id/attendance', async (req, res) => {
     const meetId = req.params.id;
-    const query = `
-        SELECT u.id, u.username, u.profilePic, a.status, a.reason
-        FROM users u
-        LEFT JOIN attendance a ON u.id = a.user_id AND a.meet_id = ?
-    `;
-    db.all(query, [meetId], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+    try {
+        const query = `
+            SELECT u.id, u.username, u.profilePic, a.status, a.reason
+            FROM users u
+            LEFT JOIN attendance a ON u.id = a.user_id AND a.meet_id = $1
+        `;
+        const result = await db.query(query, [meetId]);
+        res.json(result.rows);
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 app.listen(PORT, () => {
-    console.log(`Motor encendido. Servidor corriendo en el puerto ${PORT}`);
+    console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
