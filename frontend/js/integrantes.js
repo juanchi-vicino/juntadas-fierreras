@@ -16,7 +16,7 @@ async function loadIntegrantes() {
 
         users.forEach(member => {
             // BACKEND_URL viene definido desde api.js
-            const pic = member.profilePic ? `${BACKEND_URL}${member.profilePic}` : 'https://via.placeholder.com/150';
+            const pic = member.profilePic ? `${member.profilePic}` : 'https://via.placeholder.com/150';
             container.innerHTML += `
                 <div class="member-card">
                     <div class="avatar-wrapper">

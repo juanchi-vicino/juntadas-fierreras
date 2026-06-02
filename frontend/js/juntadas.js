@@ -17,7 +17,7 @@ async function loadMeets() {
         meets.forEach(meet => {
             const dateObj = new Date(meet.date);
             const formattedDate = dateObj.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute:'2-digit' });
-            const imageHtml = meet.image ? `<img src="${BACKEND_URL}${meet.image}" class="meet-image" alt="Flyer">` : '';
+            const imageHtml = meet.image ? `<img src="${meet.image}" class="meet-image" alt="Flyer">` : '';
 
             meetsContainer.innerHTML += `
                 <div class="meet-card">
@@ -142,7 +142,7 @@ async function openConfirmados(id) {
             if (u.status === 'SI') statusHtml = '<span class="status-si">✅ Confirmado</span>';
             if (u.status === 'NO') statusHtml = `<span class="status-no">❌ No va</span> <br><small>Motivo: ${u.reason}</small>`;
 
-            const profilePic = u.profilePic ? `${BACKEND_URL}${u.profilePic}` : 'https://via.placeholder.com/40';
+            const profilePic = u.profilePic ? `${u.profilePic}` : 'https://via.placeholder.com/40';
 
             listContainer.innerHTML += `
                 <div class="user-row">
