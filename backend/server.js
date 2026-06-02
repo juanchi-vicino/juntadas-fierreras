@@ -76,7 +76,7 @@ app.post('/api/login', async (req, res) => {
         const match = await bcrypt.compare(password, user.password);
         if (!match) return res.status(401).json({ error: 'Contraseña incorrecta.' });
 
-        res.json({ message: 'Login exitoso', user: { id: user.id, username: user.username, profilePic: user.profilePic } });
+        res.json({ message: 'Login exitoso', user: { id: user.id, username: user.username, profilePic: user.profilepic } });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -109,11 +109,11 @@ app.post('/api/attendance', async (req, res) => {
 
 app.get('/api/users', async (req, res) => {
     try {
-        const result = await db.query(`SELECT id, username, profilePic FROM users`);
+        // Le ponemos un alias (AS) con comillas dobles para forzar la mayúscula
+        const result = await db.query(`SELECT id, username, profilepic AS "profilePic" FROM users`);
         res.json(result.rows);
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
-
 app.post('/api/meets', upload.single('image'), async (req, res) => {
     const { place, date, description } = req.body;
     
@@ -134,7 +134,7 @@ app.get('/api/meets/:id/attendance', async (req, res) => {
     const meetId = req.params.id;
     try {
         const query = `
-            SELECT u.id, u.username, u.profilePic, a.status, a.reason
+            SELECT u.id, u.username, u.profilepic AS "profilePic", a.status, a.reason
             FROM users u
             LEFT JOIN attendance a ON u.id = a.user_id AND a.meet_id = $1
         `;
